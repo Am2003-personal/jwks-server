@@ -33,7 +33,7 @@ app.get("/.well-known/jwks.json", (req, res) => {
 /*
 AUTH endpoint
 POST request returns signed JWT
-If ?expired=true → sign with expired key
+If ?expired=true ,goes to sign with expired key
 */
 app.post("/auth", (req, res) => {
   const useExpired = req.query.expired === "true";
