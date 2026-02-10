@@ -1,4 +1,21 @@
-"scripts": {
-  "start": "node server.js",
-  "test": "jest --coverage"
+{
+  "name": "jwks-server",
+  "version": "1.0.0",
+  "description": "JWKS server assignment",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "jest --coverage"
+  },
+  "author": "Anthony Munoz",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3"
+  }
 }
