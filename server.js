@@ -1,70 +1,87 @@
-//Anthony Munoz CSCE3550
-//2-9-2026
+require("./keys");
 const express = require("express");
 const jwt = require("jsonwebtoken");
-const { getValidKeys, getExpiredKey, getValidKey } = require("./keys");
+const crypto = require("crypto");
+const db = require("./db");
 
 const app = express();
 const PORT = 8080;
 
 app.use(express.json());
-
 /*
 JWKS endpoint
-Returns only NON expired public keys
+Returns public keys for valid keys
 */
 app.get("/.well-known/jwks.json", (req, res) => {
-  const validKeys = getValidKeys();
 
-  const jwks = {
-    keys: validKeys.map((k) => ({
-      kty: "RSA",
-      use: "sig",
-      kid: k.kid,
-      alg: "RS256",
-      n: k.publicKey.export({ type: "pkcs1", format: "pem" }),
-      e: "AQAB",
-    })),
-  };
+  const now = Math.floor(Date.now() / 1000);
 
-  res.json(jwks);
+  db.all(
+    "SELECT key, kid FROM keys WHERE exp > ?",
+    [now],
+    (err, rows) => {
+
+      if (err) {
+        return res.status(500).json({ error: err });
+      }
+
+      const jwks = {
+        keys: rows.map(row => {
+
+          const privateKey = crypto.createPrivateKey(row.key);
+          const publicKey = crypto.createPublicKey(privateKey);
+
+          return {
+            kty: "RSA",
+            use: "sig",
+            kid: row.kid.toString(),
+            alg: "RS256",
+            n: publicKey.export({ type: "pkcs1", format: "pem" }),
+            e: "AQAB"
+          };
+        })
+      };
+
+      res.json(jwks);
+    }
+  );
 });
-
 /*
 AUTH endpoint
-POST request returns signed JWT
-If ?expired=true ,goes to sign with expired key
+Signs JWT with key from DB
 */
 app.post("/auth", (req, res) => {
+
   const useExpired = req.query.expired === "true";
+  const now = Math.floor(Date.now() / 1000);
 
-  let key;
-  if (useExpired) {
-    key = getExpiredKey();
-  } else {
-    key = getValidKey();
-  }
+  const query = useExpired
+    ? "SELECT * FROM keys WHERE exp <= ? LIMIT 1"
+    : "SELECT * FROM keys WHERE exp > ? LIMIT 1";
 
-  if (!key) {
-    return res.status(500).json({ error: "Key not found" });
-  }
+  db.get(query, [now], (err, row) => {
 
-  const payload = {
-    user: "fakeUser",
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(key.expiry / 1000),
-  };
+    if (err || !row) {
+      return res.status(500).json({ error: "Key not found" });
+    }
 
-  const token = jwt.sign(payload, key.privateKey, {
-    algorithm: "RS256",
-    keyid: key.kid,
+    const payload = {
+      user: "fakeUser",
+      iat: now,
+      exp: row.exp
+    };
+
+    const token = jwt.sign(payload, row.key, {
+      algorithm: "RS256",
+      keyid: row.kid.toString()
+    });
+
+    res.json({ token });
   });
 
-  res.json({ token });
 });
-
 app.listen(PORT, () => {
-  console.log(`JWKS server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
 
 module.exports = app;
