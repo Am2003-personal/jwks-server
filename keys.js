@@ -1,52 +1,33 @@
-//Anthony Munoz CSCE3550
-//2-9-2026
+//Anthony Munoz 3/12/2026
 const crypto = require("crypto");
-const { v4: uuidv4 } = require("uuid");
+const db = require("./db");
 
-//  creates the key holder
-let keys = [];
-
-// generates the RSA keypair
-function generateKeyPair(expired = false) {
-  const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
+function generateKey(expired = false) {
+  const { privateKey } = crypto.generateKeyPairSync("rsa", {
     modulusLength: 2048,
   });
 
-  const kid = uuidv4();
-//rules for expiration
-  const expiry = expired
-    ? Date.now() - 3600000 
-    : Date.now() + 3600000;
+  const pem = privateKey.export({
+    type: "pkcs1",
+    format: "pem",
+  });
 
-  const keyObj = {
-    kid,
-    publicKey,
-    privateKey,
-    expiry,
-  };
+  const exp = expired
+    ? Math.floor(Date.now() / 1000) - 3600   // expired
+    : Math.floor(Date.now() / 1000) + 3600;  // valid
 
-  keys.push(keyObj);
-  return keyObj;
+  db.run(
+    "INSERT INTO keys (key, exp) VALUES (?, ?)",
+    [pem, exp]
+  );
 }
 
-// generate one valid and one expired at start
-generateKeyPair(false);
-generateKeyPair(true);
+/* ensure DB always has one valid and one expired key */
+db.get("SELECT COUNT(*) as count FROM keys", (err, row) => {
+  if (!row || row.count === 0) {
+    generateKey(false);
+    generateKey(true);
+  }
+});
 
-function getValidKeys() {
-  return keys.filter((k) => k.expiry > Date.now());
-}
-
-function getExpiredKey() {
-  return keys.find((k) => k.expiry < Date.now());
-}
-
-function getValidKey() {
-  return keys.find((k) => k.expiry > Date.now());
-}
-
-module.exports = {
-  getValidKeys,
-  getExpiredKey,
-  getValidKey,
-};
+module.exports = { generateKey };
